@@ -43,7 +43,7 @@ export function Sleep() {
     <>
       {daily.stale && <Banner>Can't reach the server. Showing what this device saved earlier.</Banner>}
       <div className="grid">
-        <MetricCard metric="sleep" data={daily.data?.sleep} days={days} units={units} loading={daily.loading} note="Time asleep, counted on the day you wake up. Awake time in the night isn't included." />
+        <MetricCard metric="sleep" data={daily.data?.sleep} days={days} units={units} loading={daily.loading} latestStart={latest.data?.sleep?.start} note="Time asleep, counted on the day you wake up. Awake time in the night isn't included." />
         <Card>
           <h2 className="md-typescale-title-medium">Nights</h2>
           <ul className="legend">

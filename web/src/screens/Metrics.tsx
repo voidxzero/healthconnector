@@ -105,7 +105,7 @@ export function Metrics({ keys, extra }: { keys: string[]; extra?: 'bp' | 'exerc
       {!present.length && !showBp && latest.data && <p className="muted pad">Nothing here yet. This fills in once your phone has synced matching Health Connect data.</p>}
       <div className="grid">
         {present.map((k) => (
-          <MetricCard key={k} metric={k} data={daily.data?.[k]} days={days} units={units} loading={daily.loading} note={NOTES[k]} />
+          <MetricCard key={k} metric={k} data={daily.data?.[k]} days={days} units={units} loading={daily.loading} note={NOTES[k]} latestStart={latest.data?.[k]?.start} />
         ))}
         {showBp && <BloodPressureCard days={days} range={range} />}
         {extra === 'exercise' && latest.data?.exercise && <ExerciseList range={range} />}

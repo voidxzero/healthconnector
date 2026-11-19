@@ -1,15 +1,34 @@
 import { useState } from 'react';
 import { METRICS, SCALES, dateLabel, fmt, num, scaleColor, scaleLabel, scaleLegend, withUnit, type Day, type Units } from '../lib/metrics';
 import { Chart, Legend, type Series } from './Chart';
-import { useChartKind, useRated } from '../lib/data';
+import { RANGES, setRange, useChartKind, useRated } from '../lib/data';
 import { haptics } from '../lib/haptics';
 import { Icon } from './icons';
 import { Card, KindToggle } from './ui';
 
+/**
+ * "Nothing in this range" is not the whole story when the data is older: say when the latest reading is, and offer
+ * the shortest range that reaches it.
+ */
+export function EmptyRange({ latestStart }: { latestStart?: string }) {
+  if (!latestStart) return <p className="muted">No data in this range</p>;
+  const ageDays = Math.floor((Date.now() - Date.parse(latestStart)) / 86400000);
+  const reach = RANGES.find((n) => n > ageDays) ?? RANGES[RANGES.length - 1];
+  const label = reach === 365 ? '1 year' : `${reach} days`;
+  return (
+    <>
+      <p className="muted">Nothing in this range. The latest reading is from {new Date(latestStart).toLocaleDateString([], { month: 'short', day: 'numeric', year: ageDays > 300 ? 'numeric' : undefined })}.</p>
+      {ageDays < 365 && (
+        <md-text-button onClick={() => setRange(reach)}>Show {label}</md-text-button>
+      )}
+    </>
+  );
+}
+
 /** One metric: a headline figure, a chart, and a table view of the same numbers. */
 export function MetricCard({
-  metric, data, days, units, loading, note,
-}: { metric: string; data: Day[] | undefined; days: string[]; units: Units; loading: boolean; note?: string }) {
+  metric, data, days, units, loading, note, latestStart,
+}: { metric: string; data: Day[] | undefined; days: string[]; units: Units; loading: boolean; note?: string; latestStart?: string }) {
   const m = METRICS[metric];
   const [table, setTable] = useState(false);
   const rows = data ?? [];
@@ -38,7 +57,7 @@ export function MetricCard({
               <span className="big">{headline.big}</span> <span className="muted">{headline.small}</span>
             </p>
           ) : (
-            <p className="muted">No data in this range</p>
+            <EmptyRange latestStart={latestStart} />
           )}
         </div>
         {rows.length > 0 && (
