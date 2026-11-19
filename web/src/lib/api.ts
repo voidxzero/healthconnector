@@ -28,6 +28,8 @@ export interface PasswordPolicy {
 export interface ServerStatus {
   app: string;
   instance_id: string;
+  /** The server's version (the same number as the app's). */
+  version: string;
   needs_setup: boolean;
   features: string[];
   user: Me | null;
@@ -239,6 +241,15 @@ export const api = {
   renameToken: (id: number, label: string) => send('PATCH', `/api/tokens/${id}`, { label }),
   revokeToken: (id: number) => send('DELETE', `/api/tokens/${id}`),
 };
+
+/** The server's version, or null if it can't be reached (or is too old to say). */
+export async function serverVersion(): Promise<string | null> {
+  try {
+    return (await api.status()).version ?? null;
+  } catch {
+    return null;
+  }
+}
 
 export interface SyncToken {
   id: number;

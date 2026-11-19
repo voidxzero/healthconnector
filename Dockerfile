@@ -15,6 +15,8 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 COPY app.py .
 COPY --from=web /build/dist ./static
+# The app's version, which the server reports so the Android app can tell they match.
+COPY --from=web /build/package.json ./app-version.json
 ENV SLEEP_DB=/data/sleep.db
 # Runs as a normal user; make sure it can read the code however the files' permissions arrived.
 RUN chmod -R a+rX /app && useradd -u 1000 -m app && mkdir /data && chown app /data

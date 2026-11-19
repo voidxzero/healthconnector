@@ -326,13 +326,28 @@ def set_password_policy(body: PasswordPolicy, _=Depends(admin_user)):
 FEATURES = ["accounts", "records", "daily", "password-policy"]
 
 
+def _version() -> str:
+    """The app's version (web/package.json), so the Android app can tell whether it and the server match.
+    In the Docker image it is copied next to the code; run from the source tree it is in web/."""
+    for rel in ("app-version.json", os.path.join("web", "package.json")):
+        try:
+            with open(os.path.join(_HERE, rel)) as f:
+                return json.load(f)["version"]
+        except (OSError, KeyError, ValueError):
+            pass
+    return "unknown"
+
+
+VERSION = _version()
+
+
 @app.get("/api/status")
 def status(request: Request):
     """Public: lets an app check an address is really this server."""
     with closing(db()) as c:
         n = c.execute("SELECT COUNT(*) FROM user").fetchone()[0]
     return {"app": "healthconnector", "instance_id": instance_id(), "needs_setup": n == 0,
-            "features": FEATURES, "user": user_from_session(request)[0], "password_policy": get_policy()}
+            "version": VERSION, "features": FEATURES, "user": user_from_session(request)[0], "password_policy": get_policy()}
 
 
 @app.post("/api/setup")

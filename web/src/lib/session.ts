@@ -72,7 +72,8 @@ export async function signOut() {
   } catch {
     /* ignore */
   }
-  if (isNative) setConn({ token: '', syncTokenId: null });
+  // Signing out of a server leaves the app working on this phone's own data, not stuck at a login.
+  if (isNative) enterLocal();
   saveMe(null);
   clearCache();
 }
@@ -80,7 +81,9 @@ export async function signOut() {
 /** Who is signed in: asks the server, falling back to the saved copy when it can't be reached. */
 export async function restore(): Promise<{ me: Me | null; needsSetup: boolean; offline: boolean }> {
   if (isLocal()) return { me: LOCAL_ME, needsSetup: false, offline: false };
-  if (isNative && (!getConn().serverUrl || !getConn().token)) return { me: null, needsSetup: false, offline: false };
+  // The Android app is standalone unless it has been connected to a server: no sign-in screen. (An install from
+  // before standalone existed has a server and a token, and stays connected.)
+  if (isNative && !getConn().token) return { me: enterLocal(), needsSetup: false, offline: false };
   try {
     if (isNative) {
       const me = await api.me();

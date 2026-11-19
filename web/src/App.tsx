@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useState } from 'react';
 import { isLocal, isNative, onConnChange, type Me } from './lib/api';
 import { localRefresh } from './lib/localsync';
-import { enterLocal, restore, signOut } from './lib/session';
+import { LOCAL_ME, enterLocal, restore, signOut } from './lib/session';
 import { Icon } from './components/icons';
 import { haptics } from './lib/haptics';
+import { checkForUpdate, initUpdates, updateAvailable, useUpdates } from './lib/updates';
 import { useUnits } from './lib/data';
 import { pushCatalog, refreshWidgets, widgets } from './lib/widgets';
 import { Logo } from './components/Logo';
@@ -14,6 +15,9 @@ import { Overview } from './screens/Overview';
 import { Sleep } from './screens/Sleep';
 import { Metrics } from './screens/Metrics';
 import { Settings } from './screens/Settings';
+
+// Look for a new app version when the app opens and each time it comes back into view (Android app only).
+initUpdates();
 
 const TABS = [
   { id: 'overview', label: 'Overview', icon: 'home', ranged: false },
@@ -54,7 +58,7 @@ export function App() {
     const out = () => setMe(null);
     const req = async () => {
       await signOut();
-      setMe(null);
+      setMe(isLocal() ? LOCAL_ME : null); // the Android app carries on standalone; a browser goes back to the login
       setEpoch((e) => e + 1);
     };
     window.addEventListener('hc:signed-out', out);
@@ -74,6 +78,13 @@ export function App() {
   // Home screen widgets: give them the app's metric definitions (again when units change), redraw them after data
   // changes, and open the screen a tapped widget asked for.
   const units = useUnits();
+  const updates = useUpdates();
+  useEffect(() => {
+    // Each finished sync also looks for a new version; checkForUpdate skips it if it asked in the last 5 minutes.
+    const check = () => void checkForUpdate();
+    window.addEventListener('hc:synced', check);
+    return () => window.removeEventListener('hc:synced', check);
+  }, []);
   useEffect(() => {
     void pushCatalog(units);
   }, [units]);
@@ -152,6 +163,12 @@ export function App() {
           <h1 className="md-typescale-headline-small">{cur.label}</h1>
           {cur.ranged && <RangeBar />}
         </header>
+        {updateAvailable(updates) && tab !== 'settings' && (
+          <button className="update-bar" onClick={() => go('settings')}>
+            <Icon name="download" size={18} />
+            <span>Version {updates.latest} of HealthConnector is ready. Tap to update.</span>
+          </button>
+        )}
         <main>
           {tab === 'overview' && <Overview onGo={go} />}
           {tab === 'sleep' && <Sleep />}

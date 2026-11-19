@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
-import { ApiError, api, getConn, isLocal, isNative, normalizeUrl, setConn, type Me, type PasswordPolicy, type SyncToken } from '../lib/api';
+import { ApiError, api, getConn, isLocal, isNative, serverVersion, normalizeUrl, setConn, type Me, type PasswordPolicy, type SyncToken } from '../lib/api';
 import { policyHint, usePolicy } from '../lib/policy';
 import { refreshWidgets, widgets } from '../lib/widgets';
+import { checkForUpdate, installUpdate, isNewer, updateAvailable, useUpdates } from '../lib/updates';
 import { haptics, hapticsAvailable, hapticsEnabled, setHapticsEnabled } from '../lib/haptics';
 import { health } from '../lib/health';
 import { setUnits, useFetch, useUnits } from '../lib/data';
@@ -168,6 +169,7 @@ function Account({ me }: { me: Me }) {
         <md-text-button onClick={() => window.dispatchEvent(new Event('hc:sign-out-request'))}><Icon name="logout" size={18} /> Sign out</md-text-button>
       </div>
       {done && <p role="status" className="small">Password changed. Other devices were signed out.</p>}
+      {isNative && <p className="muted small">Signing out disconnects from the server. The app keeps working on this phone's own data.</p>}
       <Dialog open={open} onClose={close} title="Change password"
         actions={<><md-text-button onClick={close}>Cancel</md-text-button><md-filled-button onClick={submit} disabled={!cur || !n1}>Change</md-filled-button></>}>
         <Field label="Current password" type="password" value={cur} onChange={setCur} autoComplete="current-password" />
@@ -274,6 +276,50 @@ function PasswordRules() {
   );
 }
 
+/** Android only: the installed version, whether GitHub has a newer one, and the button that installs it. */
+function AppUpdates() {
+  const updates = useUpdates();
+  const available = updateAvailable(updates);
+  const busy = updates.status !== 'idle';
+  // The server is updated by hand, so it can be on another version than the app. Only matters when there is a server.
+  const [server, setServer] = useState<string | null | undefined>(undefined);
+  useEffect(() => {
+    if (isLocal()) return;
+    let live = true;
+    void serverVersion().then((v) => live && setServer(v));
+    return () => {
+      live = false;
+    };
+  }, [updates.checkedAt]);
+  const match = server && updates.current ? (server === updates.current ? 'same' : isNewer(server, updates.current) ? 'app-older' : 'server-older') : null;
+  return (
+    <Card>
+      <h2 className="md-typescale-title-medium">App updates</h2>
+      <p className="muted">
+        {updates.current ? `You have version ${updates.current}.` : 'Checking which version you have…'}{' '}
+        {available ? `Version ${updates.latest} is available.` : updates.latest && !updates.error ? "That's the latest." : ''}
+      </p>
+      {match === 'same' && <Banner icon="check">App and server match (version {server}).</Banner>}
+      {match === 'app-older' && <Banner icon="warn">Mismatch: the server is on version {server}, newer than this app ({updates.current}). Update the app.</Banner>}
+      {match === 'server-older' && <Banner icon="warn">Mismatch: this app is {updates.current}, but the server is still on {server}. Update the server to get everything working.</Banner>}
+      {server === null && !isLocal() && updates.current && <p className="muted small">Can't reach the server to compare versions.</p>}
+      {updates.error && <Banner icon="warn" tone="error">{updates.error}</Banner>}
+      {updates.askedPermission && <Banner icon="check">Allow HealthConnector to install updates on the screen that just opened, come back, and tap the button again.</Banner>}
+      <div className="row">
+        {available && (
+          <md-filled-button onClick={() => { haptics.step(); void installUpdate(); }} disabled={busy}>
+            <Icon name="download" size={18} />{' '}
+            {updates.status === 'downloading' ? (updates.progress != null ? `Downloading… ${Math.round(updates.progress * 100)}%` : 'Downloading…') : `Update to ${updates.latest}`}
+          </md-filled-button>
+        )}
+        <md-filled-tonal-button onClick={() => { haptics.step(); void checkForUpdate(true); }} disabled={busy}>
+          <Icon name="sync" size={18} /> {updates.status === 'checking' ? 'Checking…' : 'Check for updates'}
+        </md-filled-tonal-button>
+      </div>
+    </Card>
+  );
+}
+
 /** How to add home screen widgets, and how many there are. */
 function Widgets() {
   const [count, setCount] = useState<number | null>(null);
@@ -349,6 +395,7 @@ export function Settings({ me }: { me: Me }) {
         </div>
       </Card>
       {isNative && health && <PhoneSync />}
+      {isNative && <AppUpdates />}
       {isNative && <Widgets />}
       {isNative && <Feedback />}
       {isNative && !local && <ServerCard />}

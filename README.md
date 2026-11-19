@@ -19,18 +19,22 @@ If the server is reachable from outside your home network, put it behind HTTPS (
 
 ## Install the Android app
 
+Download `healthconnector.apk` from the [latest release](https://github.com/voidxzero/healthconnector/releases/latest) on your phone and open it (Android asks once to allow installing from your browser or files app). After that the app **updates itself**: it checks GitHub for a newer release when you open it, when it comes back into view, after a sync, and when you pull down, and offers a banner and an **Update** button in Settings → App updates.
+
+Or build it yourself (needs the Android SDK and JDK 21):
+
 ```sh
-./build-apk.sh                    # needs the Android SDK and JDK 21; makes healthconnector.apk
+./build-apk.sh                    # makes healthconnector.apk
 adb install -r healthconnector.apk   # or copy the file to the phone and open it
 ```
 
-1. Enter your server's address (for example `192.168.1.20:8000` or `health.example.com`) and sign in. If the server has a second address, such as its IP on your home Wi-Fi, add it as the local address; the app switches to it when the main one can't be reached.
-2. Open **Settings → Health Connect sync**, tap **Allow access**, switch on everything (including past data and background access), then tap **Sync now**.
-3. After that it syncs by itself, by default about every 6 hours (you can change that in Settings).
+A build from source is signed with a throwaway key unless you provide your own (see below), so it can't update over the official release: uninstall one before installing the other.
 
-The app makes its own sync token when you sign in, so there is nothing to copy; signing in again from the same phone replaces it rather than adding another. Signing out revokes it. Phones are listed under Settings → Phones sending data, where any one can be removed.
+**No server needed.** Open the app, tap **Allow access**, and Health Connect shows up in the dashboard, kept on the phone and refreshed whenever you open it. There is no sign-in.
 
-**No server?** Choose "Use on this phone only" on the sign-in screen. The app then reads Health Connect itself and shows the same dashboard from a copy kept on the phone; nothing leaves it. You can connect to a server later from Settings.
+**With a server** (optional): in Settings, tap **Connect to a server**, enter its address (for example `192.168.1.20:8000` or `health.example.com`) and sign in. If the server has a second address, such as its IP on your home Wi-Fi, add it as the local address; the app switches to it when the main one can't be reached. Then allow access and tap **Sync now** (it also syncs by itself, by default about every 6 hours; you can change that in Settings). Signing out goes back to standalone.
+
+The app makes its own sync token when you connect, so there is nothing to copy; connecting again from the same phone replaces it rather than adding another. Disconnecting revokes it. Devices are listed under Settings → Devices sending data, where any one can be removed.
 
 The first sync reads up to 90 days back (30 if you decline "past data"); later ones re-read the last week to catch late data, so nothing is double counted.
 
@@ -51,12 +55,21 @@ Sleep (with stages), steps, distance, active and total calories, hydration, nutr
 
 When a phone and a watch both count steps (or other running totals), each day uses whichever source counted more instead of adding them.
 
+## Releases
+
+`./release.sh 1.2.0` bumps the version (it lives in `web/package.json`, and the Android version code is derived from it), commits, tags `v1.2.0` and pushes. GitHub Actions then runs the tests, builds the APK signed with the release key, and publishes it as a release; phones pick it up from there. **Run workflow** on the Actions page does a dry run that builds and keeps the APK without publishing.
+
+Every release must be signed with the same key, or Android refuses it as an update. The key is `~/.config/healthconnector/release.jks` with `keystore.properties` beside it (never committed), and the repository has `KEYSTORE_BASE64` and `KEYSTORE_PASSWORD` secrets for CI. **Back that folder up**: without it, nobody can update; they would have to uninstall and reinstall.
+
 ## Development
 
 ```sh
 pip install -r requirements.txt && uvicorn app:app --port 8000   # API; serves web/dist if built
 cd web && npm install && npm run dev      # web app with live reload, proxies /api to :8000
 cd web && npm run build                   # type-check + bundle
+python -m pytest                           # server tests (pip install -r requirements-dev.txt)
+cd web && npm test                         # web logic tests
+cd web/android && ./gradlew testDebugUnitTest   # native widget tests
 python demo_data.py http://localhost:8000 demo demo-password   # made-up data for trying things out
 ```
 

@@ -1,6 +1,7 @@
 import { isLocal, isNative } from './api';
 import { health } from './health';
 import { localRefresh } from './localsync';
+import { checkForUpdate } from './updates';
 import { ensurePhoneSync } from './session';
 
 /** Anything that finished syncing calls this; the corner tick listens. */
@@ -11,6 +12,7 @@ export const markSynced = () => window.dispatchEvent(new Event('hc:synced'));
  * the phone's own copy in on-device mode); in a browser it just reloads. Returns a short message to show.
  */
 export async function refreshAll(): Promise<string> {
+  void checkForUpdate(true); // a pull looks for a new app version too; a banner shows if there is one
   if (isLocal()) {
     const n = await localRefresh(true);
     return n === null ? 'Allow Health Connect access in Settings first' : `Read ${n} records`;

@@ -11,6 +11,7 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(HealthConnectPlugin.class);
         registerPlugin(HapticsPlugin.class);
         registerPlugin(WidgetsPlugin.class);
+        registerPlugin(UpdaterPlugin.class);
         rememberRoute(getIntent());
         super.onCreate(savedInstanceState);
     }

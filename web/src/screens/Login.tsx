@@ -59,7 +59,8 @@ export function Login({
         <p className="muted">Your Health Connect data, on your own server.</p>
       </div>
       <Card className="login-card">
-        <h2 className="md-typescale-title-large">{needsSetup ? 'Create your account' : 'Sign in'}</h2>
+        <h2 className="md-typescale-title-large">{needsSetup ? 'Create your account' : onBack ? 'Connect to a server' : 'Sign in'}</h2>
+        {onBack && !needsSetup && <p className="muted">Optional. Connecting sends your Health Connect data to your own server too, so you can see it on other devices. The app works fine without one.</p>}
         {needsSetup && <p className="muted">This server has no accounts yet. The first one becomes the admin; you can add others afterwards.</p>}
         {isNative && (
           <>
@@ -72,7 +73,7 @@ export function Login({
         {needsSetup && <Field label="Repeat password" type="password" value={pw2} onChange={setPw2} onEnter={submit} autoComplete="new-password" />}
         {err && <p className="error" role="alert">{err}</p>}
         <md-filled-button onClick={submit} disabled={busy || !user || !pw} class="wide">
-          {busy ? 'Please wait…' : needsSetup ? 'Create account' : 'Sign in'}
+          {busy ? 'Please wait…' : needsSetup ? 'Create account' : onBack ? 'Connect' : 'Sign in'}
         </md-filled-button>
       </Card>
       {onLocal && (

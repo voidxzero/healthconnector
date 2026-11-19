@@ -15,7 +15,9 @@ Self-hosted dashboard for Android Health Connect data. Three parts: a Python ser
   - `android/` Capacitor project. `android/app/src/main/assets/public` is generated; never edit it.
 - `web/android/app/src/main/java/app/healthconnector/` — hand-written native code (Kotlin): `HcSync` (one `spec` per Health Connect type, batching, posting, saved settings), `SyncWorker` (WorkManager, every 6 h), `HealthConnectPlugin` (Capacitor plugin `HealthConnect`), `MainActivity` (registers it).
 - `Dockerfile`, `docker-compose.yml` — one image: builds `web/`, serves it from the Python server as `./static`.
-- `build-apk.sh` — builds `healthconnector.apk` (debug-signed) at the project root.
+- `build-apk.sh` — `./build-apk.sh` builds the **release** APK (`healthconnector.apk`, signed with the permanent key if `~/.config/healthconnector/keystore.properties` exists); `./build-apk.sh debug` builds the **debuggable** one (`healthconnector-debug.apk`) that the emulator tests below need (a release build's web view can't be inspected).
+- `release.sh <version>` — bumps `web/package.json`, commits, tags `v<version>`, pushes; `.github/workflows/release.yml` then tests, builds the signed APK and publishes the GitHub release.
+- `tests/test_api.py` — server tests (`python -m pytest`). CI runs them, the web tests and the native unit tests before building.
 - `demo_data.py` — fills a throwaway server with 90 days of made-up data.
 - `android/` and `static/` at the root are the first version (standalone forwarder app, one-page viewer). Superseded and unused; kept (source only) in the first commit. Safe to delete now: they're recoverable from git history. Ask first anyway.
 
@@ -25,13 +27,21 @@ Self-hosted dashboard for Android Health Connect data. Three parts: a Python ser
 - Never commit `.env`, `data/`, `*.apk`, `node_modules`, `dist`, `.venv` or signing keys (all in `.gitignore`). The APK is built locally (`./build-apk.sh`, debug-signed) and not published anywhere yet.
 - Only commit or push when the user asks.
 
+## Updates and releases
+
+- **The Android app updates itself from this repo's GitHub releases** (public, so no token). `lib/updates.ts` (ported from rxmindly) asks `api.github.com/repos/voidxzero/healthconnector/releases/latest` when the app opens, comes into view, finishes a sync (`hc:synced`) or is pulled down (forced), at most every 5 minutes otherwise; `UpdaterPlugin.java` downloads the APK (HTTPS, GitHub hosts only, redirects followed without leaking anything), checks it is this app's package, and opens Android's installer, which itself refuses anything not signed with the installed key. UI: **App updates** card in Settings (version, "Update to x", progress, install-permission prompt, app-vs-server version match using `version` from `/api/status`) and a banner on every other screen.
+- **The version is `web/package.json`** and nothing else: Gradle derives `versionName` and `versionCode` (major*10000 + minor*100 + patch), the server reports it (`app-version.json` in the Docker image, `web/package.json` from source). The app and server should be on the same version; the card says when they aren't.
+- **Signing key:** `~/.config/healthconnector/release.jks` + `keystore.properties` (created 2026-11-19, alias `healthconnector`, 100-year validity; never commit, never print the password, never regenerate: a new key means nobody can update). CI has the same key as the `KEYSTORE_BASE64` / `KEYSTORE_PASSWORD` repo secrets. Without a key a build falls back to the debug key, which can't update over a release.
+- **Releasing:** after a committed and pushed change that affects the app (anything under `web/`), run `./release.sh <next version>`: patch for fixes and small changes, minor for features, major only if the user says so. Build and test first. Server-only or docs-only changes need no release (the server is deployed by hand). Only when the user has asked for the change to be committed and pushed.
+- **Nothing has been published yet** as of 2026-11-19: no release exists, so the update check answers "No release found." The first `./release.sh` (version 1.0.0 is already in `package.json`, so use `./release.sh 1.0.1` or reset the version first; a tag must differ from existing ones and match `package.json`) creates it. Debug-signed builds already installed on a phone must be uninstalled once before the first release APK can be installed (different signing key).
+
 ## Commands
 
 ```sh
 .venv/bin/uvicorn app:app --port 8000     # server; serves web/dist when it exists (HC_STATIC overrides), db from SLEEP_DB
 cd web && npm run build                   # type-check + bundle; run before calling UI work done
 cd web && npm run dev                     # live reload, proxies /api to :8000
-./build-apk.sh                            # Android APK
+./build-apk.sh [debug]                    # Android APK: release (default) or debuggable for the emulator
 python demo_data.py http://localhost:8099 demo demo-password
 ```
 
@@ -74,7 +84,7 @@ python demo_data.py http://localhost:8099 demo demo-password
 - **Server:** exercise it with FastAPI's `TestClient` against a scratch `SLEEP_DB`. There is no test suite checked in yet.
 - **Web:** Playwright in the scratchpad against a throwaway server, as rxmindly does (`. ~/.local/opt/chromium-libs/env.sh`; `npm i playwright@1.56.1`). Type into Material text fields by setting `.value` and dispatching `input`; `page.click('text=…')` can match hidden dialog headings, so use `md-…:has-text(…)`.
 - **Android:** the machine's two emulators belong to other projects (`emulator-5554` video-edit, `emulator-5580` rxmindly): don't drive them. This project has its own AVD, `hcphone` (Pixel 7, Android 16, hardware keyboard on), started with `emulator -avd hcphone -port 5590 -no-window -no-audio -gpu swiftshader_indirect` with `DISPLAY` unset. A cold boot takes ~3 minutes and ends in a "System UI isn't responding" dialog: tap Wait. From the phone the dev machine is `10.0.2.2`.
-- **Driving the app:** the debug build's WebView is inspectable. `adb -s emulator-5590 forward tcp:9222 localabstract:webview_devtools_remote_<pid>`, then talk DevTools protocol to `localhost:9222/json` (Playwright's `connectOverCDP` does not work with Android WebViews; a ~25-line WebSocket client does). Typing through `adb emu event text` garbles fast input; set field values through the DOM instead.
+- **Driving the app:** needs `./build-apk.sh debug` (the release build's WebView is not inspectable, and it won't install over a debug one: uninstall first). The debug build's WebView is inspectable. `adb -s emulator-5590 forward tcp:9222 localabstract:webview_devtools_remote_<pid>`, then talk DevTools protocol to `localhost:9222/json` (Playwright's `connectOverCDP` does not work with Android WebViews; a ~25-line WebSocket client does). Typing through `adb emu event text` garbles fast input; set field values through the DOM instead.
 - **Health Connect has no data on a fresh emulator** and the app only has read access. To test a real sync, temporarily add a plugin that writes sample records (needs `WRITE_*` permissions in the manifest and a permission prompt), run **Sync now**, check the server's `record` table, then remove it. Done once on 2026-11-18: 18 records arrived with correct values for sleep stages, exercise, blood pressure, weight, steps and bucketed heart rate.
 - **Scale test (2026-11-18):** 12,000 step records and 1,000 heart-rate records (30 samples each) written into the emulator's Health Connect: the server sync sent 18,018 records in ~13 s, and the on-device read took ~13 s and charted all 83 days. That is how the 422 was caught; the earlier test had a handful of records.
 - **Widgets on the emulator (2026-11-19):** added from the real launcher (Widgets → HealthConnector → Add), set up in the web screen, and re-rendered as steps bar (30 days, coloured), steps line, heart-rate number only and weight chart; tapping opens the right tab. Unit tests: `cd web/android && ./gradlew testDebugUnitTest`. The Android launcher rejects hand-made `APPWIDGET_UPDATE` broadcasts; to redraw in a test, edit `shared_prefs/widgets.xml` with `run-as`, `am kill` the app, start it and call `HcWidgets.refresh()` over DevTools (`am force-stop` leaves the app "stopped" and widgets blank).
