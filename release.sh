@@ -19,9 +19,12 @@ if git rev-parse "v$version" >/dev/null 2>&1; then
   exit 1
 fi
 
-(cd web && npm version "$version" --no-git-tag-version >/dev/null)
-git add web/package.json web/package-lock.json
-git commit -q -m "Release $version"
+# The very first release can be the version already in package.json: then there is nothing to bump or commit.
+if [ "$(node -p "require('./web/package.json').version")" != "$version" ]; then
+  (cd web && npm version "$version" --no-git-tag-version >/dev/null)
+  git add web/package.json web/package-lock.json
+  git commit -q -m "Release $version"
+fi
 git tag "v$version"
 git push -q origin HEAD "v$version"
 echo "Pushed v$version. GitHub is building it: https://github.com/voidxzero/healthconnector/actions"
