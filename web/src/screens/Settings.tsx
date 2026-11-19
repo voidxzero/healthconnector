@@ -2,12 +2,15 @@ import { useCallback, useEffect, useState } from 'react';
 import { ApiError, api, getConn, isLocal, isNative, serverVersion, normalizeUrl, setConn, type Me, type PasswordPolicy, type SyncToken } from '../lib/api';
 import { policyHint, usePolicy } from '../lib/policy';
 import { refreshWidgets, widgets } from '../lib/widgets';
+import { sourceName } from '../lib/sources';
+import { TYPES } from '../lib/localdata';
+import { METRICS } from '../lib/metrics';
 import { checkForUpdate, installUpdate, isNewer, updateAvailable, useUpdates } from '../lib/updates';
 import { haptics, hapticsAvailable, hapticsEnabled, setHapticsEnabled } from '../lib/haptics';
 import { health } from '../lib/health';
 import { setUnits, useFetch, useUnits } from '../lib/data';
 import { ensurePhoneSync } from '../lib/session';
-import { clearLocalData, localError, localLastSync, localRefresh } from '../lib/localsync';
+import { clearLocalData, localError, localLastSync, localRefresh, refreshAfterAccess } from '../lib/localsync';
 import { Banner, Card, Dialog, Field } from '../components/ui';
 import { Icon } from '../components/icons';
 
@@ -60,7 +63,7 @@ function PhoneSync() {
           <p>{st.missing === 0 ? 'All data types allowed.' : `${st.total - st.missing} of ${st.total} data types allowed.`}</p>
           <p className="muted small">{local ? `Last read: ${localLastSync() ? new Date(localLastSync()).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : 'never'}` : `Last sync: ${st.lastStatus || 'never'}`}</p>
           <div className="row">
-            {st.missing > 0 && <md-filled-button onClick={() => run(async () => { await health!.requestAccess(); if (local) await localRefresh(true); })} disabled={busy}>Allow access</md-filled-button>}
+            {st.missing > 0 && <md-filled-button onClick={() => run(async () => { await health!.requestAccess(); if (local) await refreshAfterAccess(); })} disabled={busy}>Allow access</md-filled-button>}
             <md-filled-tonal-button onClick={() => run(async () => {
               if (local) { const n = await localRefresh(true); setMsg(n === null ? 'Nothing to read yet.' : `Read ${n} records.`); return; }
               await ensurePhoneSync(); const r = await health!.syncNow(); setMsg(`Sent ${r.sent} records.`);
@@ -68,6 +71,7 @@ function PhoneSync() {
               <Icon name="sync" size={18} /> {busy ? (local ? 'Reading…' : 'Syncing…') : local ? 'Refresh now' : 'Sync now'}
             </md-filled-tonal-button>
           </div>
+          <HealthCheck info={st} />
           {local ? (
             <p className="muted small">It also refreshes whenever you open the app.</p>
           ) : (
@@ -273,6 +277,85 @@ function PasswordRules() {
         {msg && <span role="status" className="muted small">{msg}</span>}
       </div>
     </Card>
+  );
+}
+
+interface Found { type: string; granted: boolean; count: number; sources: string[]; newestMs: number | null; beyond: boolean }
+
+/**
+ * "What's in Health Connect?": for every data type, whether it is allowed, how many records this app can see and which
+ * apps wrote them. When something is allowed but empty, the answer is almost always that no app is putting data into
+ * Health Connect (or that the data is older than the app is allowed to read), and this says which.
+ */
+function HealthCheck({ info }: { info: Sdk }) {
+  const [rows, setRows] = useState<Found[] | null>(null);
+  const [busy, setBusy] = useState(false);
+  const run = async () => {
+    setBusy(true);
+    setRows([]);
+    const out: Found[] = [];
+    for (const type of Object.keys(TYPES)) {
+      try {
+        out.push({ type, ...(await health!.inspect({ type })) });
+      } catch (e: any) {
+        out.push({ type, granted: true, count: -1, sources: [e?.message || 'failed'], newestMs: null, beyond: false });
+      }
+      setRows([...out]);
+    }
+    setBusy(false);
+  };
+  const days = info.history ? 90 : 30;
+  const allowed = rows?.filter((r) => r.granted && r.count >= 0) ?? [];
+  const total = allowed.reduce((a, r) => a + Math.max(0, r.count), 0);
+  const withData = allowed.filter((r) => r.count > 0);
+  const newest = Math.max(0, ...allowed.map((r) => r.newestMs ?? 0));
+  const apps = [...new Set(withData.flatMap((r) => r.sources))].map(sourceName);
+  const errors = rows?.filter((r) => r.count < 0) ?? [];
+  const done = rows !== null && !busy;
+  return (
+    <>
+      <div className="row">
+        <md-outlined-button onClick={() => { haptics.step(); void run(); }} disabled={busy}>
+          {busy ? 'Checking…' : "What's in Health Connect?"}
+        </md-outlined-button>
+      </div>
+      {rows && rows.length > 0 && (
+        <div className="table-wrap">
+          <table>
+            <thead>
+              <tr><th>Data</th><th className="num">Last {days} days</th><th>From</th></tr>
+            </thead>
+            <tbody>
+              {rows.map((r) => (
+                <tr key={r.type}>
+                  <td>{METRICS[r.type]?.label ?? r.type}</td>
+                  <td className="num">{!r.granted ? 'not allowed' : r.count < 0 ? 'error' : r.count}</td>
+                  <td className="muted small">
+                    {!r.granted ? '' : r.count < 0 ? r.sources[0] : r.count > 0 ? r.sources.map(sourceName).join(', ') : r.beyond && r.newestMs ? `newest ${new Date(r.newestMs).toLocaleDateString()} (older than read)` : ''}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      {done && total > 0 && <p className="small">Found {total.toLocaleString()} records from {apps.join(', ') || 'your apps'}.</p>}
+      {done && errors.length > 0 && (
+        <Banner icon="warn" tone="error">
+          Health Connect refused {errors.length} of the reads. If you have just allowed access, close the app completely, open it again and re-run this check; Health Connect only lets an app read while it is on screen.
+        </Banner>
+      )}
+      {done && errors.length === 0 && total === 0 && allowed.length > 0 && (
+        <Banner icon="warn">
+          Everything is allowed, but Health Connect has no records for these in the last {days} days. This app can only read what other apps put into Health Connect.
+          {newest > 0 ? ` The newest record is from ${new Date(newest).toLocaleDateString()}, which is older than the app reads${info.history ? '' : ' (allow "Past data" to read further back)'}.` : ''}
+          {' '}Open the app that tracks your health (Fitbit, Samsung Health, Garmin Connect, Google Fit…) and turn on its Health Connect sync, then refresh here.
+          <div className="row"><md-filled-tonal-button onClick={() => void health?.openHealthConnect()}>Open Health Connect</md-filled-tonal-button></div>
+        </Banner>
+      )}
+      {done && errors.length === 0 && allowed.length < Object.keys(TYPES).length && <p className="small muted">{Object.keys(TYPES).length - allowed.length} types aren't allowed. Tap Allow access above, and switch everything on.</p>}
+      {done && !info.history && <p className="small muted">"Past data" isn't allowed, so only the last 30 days can be read.</p>}
+    </>
   );
 }
 

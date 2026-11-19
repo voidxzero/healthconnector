@@ -31,10 +31,10 @@ import kotlin.reflect.KClass
 object HcSync {
     private const val PREFS = "hc"
     private const val SLICE = 1000
-    /** Bump when records gain new detail, so everything is sent again once. 2 = sleep segments. */
-    private const val DATA_VERSION = 2
-    private const val PERMISSION_BACKGROUND = "android.permission.health.READ_HEALTH_DATA_IN_BACKGROUND"
-    private const val PERMISSION_HISTORY = "android.permission.health.READ_HEALTH_DATA_HISTORY"
+    /** Bump when records gain new detail, so everything is sent again once. 2 = sleep segments, 3 = reads that failed in the background no longer count as done. */
+    private const val DATA_VERSION = 3
+    const val PERMISSION_BACKGROUND = "android.permission.health.READ_HEALTH_DATA_IN_BACKGROUND"
+    const val PERMISSION_HISTORY = "android.permission.health.READ_HEALTH_DATA_HISTORY"
 
     class Spec(val type: String, val cls: KClass<out Record>, val read: suspend (HealthConnectClient, Instant, Instant, JSONArray) -> Unit) {
         val permission: String get() = HealthPermission.getReadPermission(cls)
@@ -252,7 +252,8 @@ object HcSync {
             if (batch.length() >= SLICE) flush()
         }
         flush()
-        prefs(ctx).edit().putLong("lastSyncAt", now.toEpochMilli()).putInt("dataVersion", DATA_VERSION).apply()
+        // A type that couldn't be read doesn't count as synced: leave the clock where it was so the next sync tries the whole range again.
+        if (problems.isEmpty()) prefs(ctx).edit().putLong("lastSyncAt", now.toEpochMilli()).putInt("dataVersion", DATA_VERSION).apply()
         val tail = if (problems.isEmpty()) "" else " (skipped: ${problems.joinToString()})"
         setStatus(ctx, "Sent $sent records at ${java.text.DateFormat.getDateTimeInstance(java.text.DateFormat.SHORT, java.text.DateFormat.SHORT).format(java.util.Date())}$tail")
         return sent
@@ -277,7 +278,58 @@ object HcSync {
         try {
             spec.read(client, from, to, out)
         } catch (e: SecurityException) {
-            // allowed a moment ago and withdrawn since: nothing to return
+            // Say so, rather than report "0 records" as if there were simply nothing there.
+            throw IllegalStateException("Health Connect wouldn't let the app read ${spec.type}: ${e.message ?: "permission refused"}")
+        }
+        return out
+    }
+
+    /**
+     * For "What's in Health Connect?": whether [type] is allowed, how many records the app can see, which apps wrote
+     * them, and when the newest one is. If there are none in the range the app reads, it looks further back (up to two
+     * years, a month at a time) so it can say "the newest is from March" rather than just "nothing".
+     */
+    suspend fun inspect(ctx: Context, type: String): JSONObject {
+        val out = JSONObject().put("type", type).put("granted", false).put("count", 0).put("sources", JSONArray()).put("newestMs", JSONObject.NULL).put("beyond", false)
+        val spec = SPECS.firstOrNull { it.type == type } ?: return out
+        if (HealthConnectClient.getSdkStatus(ctx) != HealthConnectClient.SDK_AVAILABLE) return out
+        val client = HealthConnectClient.getOrCreate(ctx)
+        val granted = client.permissionController.getGrantedPermissions()
+        if (spec.permission !in granted) return out
+        out.put("granted", true)
+
+        fun summarise(records: JSONArray, beyond: Boolean) {
+            val sources = linkedSetOf<String>()
+            var newest = 0L
+            for (i in 0 until records.length()) {
+                val r = records.getJSONObject(i)
+                sources += r.optString("source")
+                newest = maxOf(newest, Instant.parse(r.getString("start")).toEpochMilli())
+            }
+            out.put("count", if (beyond) 0 else records.length()).put("sources", JSONArray(sources.filter { it.isNotEmpty() })).put("beyond", beyond)
+            if (records.length() > 0) out.put("newestMs", newest)
+        }
+
+        val inRange = readType(ctx, type, 0)
+        if (inRange.length() > 0) {
+            summarise(inRange, false)
+            return out
+        }
+        // Nothing in the range the app reads: look further back for the newest record.
+        val now = Instant.now()
+        for (i in 3..24) {
+            val to = now.minus(30L * (i - 1), ChronoUnit.DAYS)
+            val from = now.minus(30L * i, ChronoUnit.DAYS)
+            val found = JSONArray()
+            try {
+                spec.read(client, from, to, found)
+            } catch (e: SecurityException) {
+                break // older than the app is allowed to see
+            }
+            if (found.length() > 0) {
+                summarise(found, true)
+                break
+            }
         }
         return out
     }

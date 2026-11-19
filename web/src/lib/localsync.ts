@@ -4,8 +4,8 @@ import { TYPES, addLocal, clearLocal, persistLocal, utc, type LocalRec } from '.
 const LAST = 'hc.local.lastSync';
 const ERR = 'hc.local.error';
 const VER = 'hc.local.v';
-/** Bump when records gain new detail, so the next refresh reads the whole range again. 2 = sleep segments. */
-const DATA_VERSION = '2';
+/** Bump when records gain new detail, so the next refresh reads the whole range again. 2 = sleep segments, 3 = reads that failed in the background no longer count as done. */
+const DATA_VERSION = '3';
 const DAY = 86400000;
 const MIN_GAP_MS = 2 * 60000;
 const OVERLAP_MS = 7 * DAY; // re-read a few days, like the server sync: late data lands, and re-reading is harmless
@@ -75,7 +75,7 @@ export function localRefresh(force = false): Promise<number | null> {
             await take(type, from, 0);
           }
         } catch (e: any) {
-          problems.push(`${type}: ${e?.message || e}`);
+          problems.push(`${type}: ${String(e?.message || e).replace(/android\.health\.connect\.HealthConnectException: java\.lang\.SecurityException: /, '').slice(0, 140)}`);
         }
         // Let the dashboard fill in as data arrives, not only at the end.
         if (Date.now() - lastShown > 1500) {
@@ -111,4 +111,24 @@ export async function clearLocalData() {
   write(LAST, '');
   write(ERR, '');
   window.dispatchEvent(new Event('hc:data-changed'));
+}
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/**
+ * Right after the user has allowed access, Health Connect's permission screen is still closing and this app isn't
+ * yet "in the foreground" as far as Health Connect is concerned; a read then fails with "caller does not have
+ * permission to read data from other applications". So wait until the app is visible again, give it a moment, and
+ * try once more if the first read still complains.
+ */
+export async function refreshAfterAccess(): Promise<number | null> {
+  const t0 = Date.now();
+  while (document.visibilityState !== 'visible' && Date.now() - t0 < 8000) await sleep(200);
+  await sleep(800);
+  let n = await localRefresh(true);
+  if (localError()) {
+    await sleep(2500);
+    n = await localRefresh(true);
+  }
+  return n;
 }

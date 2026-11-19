@@ -2,8 +2,9 @@ import { Icon } from '../components/icons';
 import { Banner, Card, Empty, Spinner } from '../components/ui';
 import { Spark } from '../components/Spark';
 import { isLocal, isNative } from '../lib/api';
+import { useEffect, useState } from 'react';
 import { health } from '../lib/health';
-import { localError, localRefresh } from '../lib/localsync';
+import { localError, refreshAfterAccess } from '../lib/localsync';
 import { useDaily, useLatest, useUnits } from '../lib/data';
 import { METRICS, METRIC_ICONS, dateLabel, fmt, lastDays, localDate, num, type Day } from '../lib/metrics';
 
@@ -33,6 +34,11 @@ export function Overview({ onGo }: { onGo: (tab: string) => void }) {
   const daily = useDaily(TILES, 14);
   const latest = useLatest();
   const bp = latest.data?.blood_pressure;
+  // Access already given but nothing to show: then "Allow access" is the wrong advice.
+  const [allowed, setAllowed] = useState(false);
+  useEffect(() => {
+    health?.status().then((s) => setAllowed(s.sdk === 'available' && s.missing === 0)).catch(() => {});
+  }, []);
 
   if (!daily.data && !daily.error) return <div className="center"><Spinner /></div>;
   const data = daily.data ?? {};
@@ -44,15 +50,19 @@ export function Overview({ onGo }: { onGo: (tab: string) => void }) {
       {daily.error && !daily.data && <Banner tone="error" icon="warn">{daily.error}</Banner>}
       {!have.length && !bp && !daily.error && (
         <Empty title="No health data yet">
-          {isLocal()
+          {isLocal() && allowed
+            ? "Health Connect is allowed, but it has nothing for this app to show yet. This app reads what other apps (a watch, Fitbit, Samsung Health…) put into Health Connect."
+            : isLocal()
             ? 'Allow access to Health Connect and your data appears here.'
             : isNative
               ? 'Open Settings, allow Health Connect access, then tap Sync now.'
               : 'Sign in on the Android app and it will start sending your Health Connect data here.'}
           {isLocal() && localError() && <><br /><span className="error">Couldn't read some data: {localError()}</span></>}
           <br />
-          {isLocal() ? (
-            <md-filled-button class="mt" onClick={() => health?.requestAccess().then(() => localRefresh(true)).catch(() => {})}>Allow access</md-filled-button>
+          {isLocal() && allowed ? (
+            <md-filled-tonal-button onClick={() => onGo('settings')} class="mt">See what Health Connect has</md-filled-tonal-button>
+          ) : isLocal() ? (
+            <md-filled-button class="mt" onClick={() => health?.requestAccess().then(() => refreshAfterAccess()).catch(() => {})}>Allow access</md-filled-button>
           ) : (
             <md-filled-tonal-button onClick={() => onGo('settings')} class="mt">Go to Settings</md-filled-tonal-button>
           )}

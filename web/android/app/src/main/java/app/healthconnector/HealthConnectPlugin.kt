@@ -51,6 +51,13 @@ class HealthConnectPlugin : Plugin() {
                     put("lastStatus", HcSync.lastStatus(context))
                     put("lastSyncAt", HcSync.lastSyncAt(context).toString())
                     put("intervalMinutes", HcSync.intervalMinutes(context))
+                    // What "full access" really covers on this phone, and which Health Connect is answering.
+                    if (sdk() == "available") {
+                        val granted = HealthConnectClient.getOrCreate(context).permissionController.getGrantedPermissions()
+                        put("history", HcSync.PERMISSION_HISTORY in granted)
+                        put("background", HcSync.PERMISSION_BACKGROUND in granted)
+                    }
+                    put("android", Build.VERSION.SDK_INT)
                 })
             } catch (e: Exception) {
                 call.reject(e.message ?: "status failed")
@@ -87,6 +94,19 @@ class HealthConnectPlugin : Plugin() {
                 call.resolve(JSObject().put("sent", HcSync.run(context)))
             } catch (e: Exception) {
                 HcSync.recordError(context, e)
+                call.reject(e.message ?: e.javaClass.simpleName)
+            }
+        }
+    }
+
+    /** "What's in Health Connect?": allowed or not, how many records, from which apps, how recent (one type per call). */
+    @PluginMethod
+    fun inspect(call: PluginCall) {
+        val type = call.getString("type") ?: return call.reject("type is required")
+        scope.launch {
+            try {
+                call.resolve(JSObject(withContext(Dispatchers.Default) { HcSync.inspect(context, type).toString() }))
+            } catch (e: Exception) {
                 call.reject(e.message ?: e.javaClass.simpleName)
             }
         }

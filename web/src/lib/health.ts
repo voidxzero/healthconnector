@@ -14,6 +14,10 @@ interface HealthConnectPlugin {
     lastSyncAt: string;
     /** Minutes between automatic syncs; 0 = only when asked. */
     intervalMinutes: number;
+    /** "Past data" and "background" access, and the Android version, for working out why nothing shows up. */
+    history?: boolean;
+    background?: boolean;
+    android?: number;
   }>;
   requestAccess(): Promise<{ missing: number }>;
   /** Save where and how to send data, and schedule the background sync. */
@@ -25,6 +29,8 @@ interface HealthConnectPlugin {
   readRecords(o: { type: string; sinceMs: number; untilMs?: number }): Promise<{ records: any[] }>;
   /** The owner's name for this device, or its make and model. */
   deviceName(): Promise<{ name: string }>;
+  /** "What's in Health Connect?": one data type per call. */
+  inspect(o: { type: string }): Promise<{ granted: boolean; count: number; sources: string[]; newestMs: number | null; beyond: boolean }>;
   openHealthConnect(): Promise<void>;
   clear(): Promise<void>;
 }
