@@ -1,0 +1,206 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Health Connector</title>
+<style>
+  :root { --bg:#fff; --fg:#1a1a1a; --muted:#666; --line:#ddd; --bar:#4a6fdc; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#111; --fg:#eee; --muted:#999; --line:#333; --bar:#7d9bff; }
+  }
+  body { background:var(--bg); color:var(--fg); font:16px system-ui, sans-serif; margin:0 auto; max-width:760px; padding:16px; }
+  h1 { font-size:1.3rem; }
+  table { width:100%; border-collapse:collapse; }
+  th, td { text-align:left; padding:6px 8px; border-bottom:1px solid var(--line); }
+  th { color:var(--muted); font-weight:500; }
+  .muted { color:var(--muted); }
+  #chart { width:100%; height:160px; }
+  input, button { font:inherit; padding:6px 10px; }
+  h2 { font-size:1.1rem; margin-top:32px; }
+  #newdev { border:1px solid var(--line); border-radius:8px; padding:12px; margin:12px 0; }
+  #qr { width:240px; max-width:100%; background:#fff; padding:8px; border-radius:6px; }
+  #qr svg { width:100%; height:auto; display:block; }
+  #tokval { width:100%; box-sizing:border-box; font-family:ui-monospace, monospace; }
+</style>
+</head>
+<body>
+<h1>Sleep</h1>
+<div id="setup" hidden>
+  <p>This server isn't set up yet. Set it up to let this browser manage it and to create tokens for your phone.</p>
+  <button id="dosetup">Set up this server</button>
+</div>
+<div id="login" hidden>
+  <p>Enter an admin token (or <code>SLEEP_TOKEN</code>) for this server:</p>
+  <input id="token" type="password" autocomplete="current-password">
+  <button id="save">Save</button>
+  <p id="loginerr" class="muted" role="alert"></p>
+</div>
+<div id="main" hidden>
+  <svg id="chart" role="img" aria-label="Hours slept per night"></svg>
+  <table>
+    <thead><tr><th>Night</th><th>Asleep</th><th>Awake</th><th>Duration</th></tr></thead>
+    <tbody id="rows"></tbody>
+  </table>
+  <p class="muted" id="status"></p>
+
+  <h2>Devices</h2>
+  <p class="muted">Add a device to get a token and QR code for the Android app. Each phone gets its own, so you can revoke one without touching the others.</p>
+  <input id="devlabel" placeholder="Label, e.g. Pixel or Laptop" maxlength="60">
+  <button id="adddev">Add phone</button>
+  <button id="addbrowser">Add browser</button>
+  <div id="newbrowser" hidden>
+    <p><strong>Shown once.</strong> Open this link in the other browser to sign it in:</p>
+    <input id="linkval" readonly>
+    <button id="copylink">Copy link</button>
+  </div>
+  <div id="newdev" hidden>
+    <p><strong>Shown once.</strong> In the Android app tap <em>Scan QR</em>, or paste the URL and token.</p>
+    <div id="qr"></div>
+    <p>Server URL: <code id="urlval"></code></p>
+    <input id="tokval" readonly>
+    <button id="copy">Copy token</button>
+  </div>
+  <table>
+    <thead><tr><th>Device</th><th>Type</th><th>Added</th><th>Last sync</th><th></th></tr></thead>
+    <tbody id="devs"></tbody>
+  </table>
+</div>
+<script>
+const KEY = "sleep_token";
+const $ = id => document.getElementById(id);
+const getToken = () => { try { return localStorage.getItem(KEY) || ""; } catch { return ""; } };
+const setToken = t => { try { localStorage.setItem(KEY, t); } catch {} };
+
+function fmt(d) { return d.toLocaleString([], {month:"short", day:"numeric", hour:"2-digit", minute:"2-digit"}); }
+function dur(ms) { const m = Math.round(ms/60000); return Math.floor(m/60) + "h " + String(m%60).padStart(2,"0") + "m"; }
+
+function chart(sessions) {
+  const svg = $("chart"); svg.innerHTML = "";
+  const data = sessions.slice(-14);
+  if (!data.length) return;
+  const W = 700, H = 160, pad = 20, bw = W / data.length;
+  const max = Math.max(10, ...data.map(s => s.hours));
+  data.forEach((s, i) => {
+    const h = (s.hours / max) * (H - pad * 2);
+    const r = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+    r.setAttribute("x", i * bw + bw * 0.15); r.setAttribute("width", bw * 0.7);
+    r.setAttribute("y", H - pad - h); r.setAttribute("height", h);
+    r.setAttribute("rx", 3); r.setAttribute("fill", "var(--bar)");
+    const t = document.createElementNS("http://www.w3.org/2000/svg", "title");
+    t.textContent = s.start.toLocaleDateString() + ": " + s.hours.toFixed(1) + " h";
+    r.appendChild(t); svg.appendChild(r);
+    const l = document.createElementNS("http://www.w3.org/2000/svg", "text");
+    l.setAttribute("x", i * bw + bw / 2); l.setAttribute("y", H - 4);
+    l.setAttribute("text-anchor", "middle"); l.setAttribute("font-size", "10");
+    l.setAttribute("fill", "var(--muted)"); l.textContent = s.end.getDate();
+    svg.appendChild(l);
+  });
+  svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+}
+
+async function showLogin() {
+  $("main").hidden = true;
+  let setup = false;
+  try { setup = (await (await fetch("/setup/status")).json()).needs_setup; } catch {}
+  $("setup").hidden = !setup;
+  $("login").hidden = setup;
+}
+
+async function load() {
+  const token = getToken();
+  $("setup").hidden = true;
+  if (!token) { showLogin(); return; }
+  const res = await fetch("/sleep", { headers: { Authorization: "Bearer " + token } });
+  if (res.status === 401) { setToken(""); await showLogin(); $("loginerr").textContent = "That token was rejected by the server."; return; }
+  if (!res.ok) { await showLogin(); $("loginerr").textContent = "Server error (" + res.status + ")."; return; }
+  $("loginerr").textContent = "";
+  const rows = await res.json();
+  const sessions = rows.map(r => {
+    const start = new Date(r.start), end = new Date(r.end);
+    return { start, end, ms: end - start, hours: (end - start) / 3.6e6 };
+  }).filter(s => !isNaN(s.ms) && s.ms > 0);
+  $("login").hidden = true; $("main").hidden = false;
+  $("rows").innerHTML = "";
+  sessions.slice().reverse().forEach(s => {
+    const tr = document.createElement("tr");
+    [s.end.toLocaleDateString([], {weekday:"short", month:"short", day:"numeric"}), fmt(s.start), fmt(s.end), dur(s.ms)]
+      .forEach(v => { const td = document.createElement("td"); td.textContent = v; tr.appendChild(td); });
+    $("rows").appendChild(tr);
+  });
+  chart(sessions);
+  loadDevices();
+  $("status").textContent = sessions.length ? sessions.length + " sessions" : "No sleep data yet.";
+}
+
+const authHeaders = () => ({ Authorization: "Bearer " + getToken() });
+
+async function loadDevices() {
+  const res = await fetch("/tokens", { headers: authHeaders() });
+  if (!res.ok) return;
+  $("devs").innerHTML = "";
+  (await res.json()).forEach(d => {
+    const tr = document.createElement("tr");
+    [d.label + (d.current ? " (this browser)" : ""), d.role === "admin" ? "Browser" : "Phone", fmt(new Date(d.created_at)), d.last_used_at ? fmt(new Date(d.last_used_at)) : "never"]
+      .forEach(v => { const td = document.createElement("td"); td.textContent = v; tr.appendChild(td); });
+    const td = document.createElement("td"), b = document.createElement("button");
+    b.textContent = "Revoke";
+    b.onclick = async () => {
+      if (!confirm("Revoke " + d.label + "? That device will stop syncing.")) return;
+      await fetch("/tokens/" + d.id, { method: "DELETE", headers: authHeaders() });
+      loadDevices();
+    };
+    if (!d.current) td.appendChild(b);
+    tr.appendChild(td); $("devs").appendChild(tr);
+  });
+}
+
+async function createToken(role) {
+  const res = await fetch("/tokens", {
+    method: "POST",
+    headers: { ...authHeaders(), "Content-Type": "application/json" },
+    body: JSON.stringify({ label: $("devlabel").value.trim() || (role === "admin" ? "Browser" : "Phone"), url: location.origin, role }),
+  });
+  if (!res.ok) { alert("Could not create token (" + res.status + ")"); return null; }
+  $("devlabel").value = "";
+  $("newdev").hidden = true; $("newbrowser").hidden = true;
+  loadDevices();
+  return res.json();
+}
+$("adddev").onclick = async () => {
+  const d = await createToken("device"); if (!d) return;
+  $("qr").innerHTML = d.qr_svg;
+  $("urlval").textContent = location.origin;
+  $("tokval").value = d.token;
+  $("newdev").hidden = false;
+};
+$("addbrowser").onclick = async () => {
+  const d = await createToken("admin"); if (!d) return;
+  $("linkval").value = d.setup;
+  $("newbrowser").hidden = false;
+};
+$("copylink").onclick = async () => {
+  try { await navigator.clipboard.writeText($("linkval").value); }
+  catch { $("linkval").select(); document.execCommand("copy"); }
+};
+$("copy").onclick = async () => {
+  try { await navigator.clipboard.writeText($("tokval").value); }
+  catch { $("tokval").select(); document.execCommand("copy"); }
+};
+
+$("dosetup").onclick = async () => {
+  const res = await fetch("/setup", { method: "POST" });
+  if (!res.ok) { showLogin(); return; }
+  setToken((await res.json()).token);
+  load();
+};
+$("save").onclick = () => { setToken($("token").value.trim()); load(); };
+// A sign-in link from "Add browser" looks like https://host/#token=...
+try {
+  const m = location.hash.match(/^#token=([\w-]+)$/);
+  if (m) { setToken(m[1]); history.replaceState(null, "", location.pathname + location.search); }
+} catch {}
+load();
+</script>
+</body>
+</html>

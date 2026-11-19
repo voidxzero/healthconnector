@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Same as the app's light surfaces (web/src/styles.css) -->
+    <color name="widget_bg">#F2F3FA</color>
+    <color name="widget_text">#191C20</color>
+    <color name="widget_text2">#41474E</color>
+    <color name="widget_grid">#E1E0D9</color>
+</resources>

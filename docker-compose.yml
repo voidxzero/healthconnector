@@ -1,0 +1,9 @@
+services:
+  healthconnector:
+    build: .
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    volumes:
+      # The database lives here. The folder must be owned by uid 1000 (the container's user).
+      - ./data:/data

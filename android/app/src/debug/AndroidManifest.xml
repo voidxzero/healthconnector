@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+    <!-- Debug builds only: fake data seeding and plain-HTTP to the dev server. -->
+    <uses-permission android:name="android.permission.health.WRITE_SLEEP" />
+    <application android:usesCleartextTraffic="true" tools:replace="android:usesCleartextTraffic">
+        <activity android:name=".SeedActivity" android:exported="true" />
+    </application>
+</manifest>

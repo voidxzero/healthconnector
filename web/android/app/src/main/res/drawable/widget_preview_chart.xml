@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Seven bars for the widget picker's preview -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="140dp" android:height="48dp" android:viewportWidth="140" android:viewportHeight="48">
+    <path android:fillColor="#0CA30C" android:pathData="M6,48V14Q6,10 10,10H16Q20,10 20,14V48Z" />
+    <path android:fillColor="#0CA30C" android:pathData="M26,48V10Q26,6 30,6H36Q40,6 40,10V48Z" />
+    <path android:fillColor="#B7A60E" android:pathData="M46,48V22Q46,18 50,18H56Q60,18 60,22V48Z" />
+    <path android:fillColor="#0CA30C" android:pathData="M66,48V12Q66,8 70,8H76Q80,8 80,12V48Z" />
+    <path android:fillColor="#0CA30C" android:pathData="M86,48V8Q86,4 90,4H96Q100,4 100,8V48Z" />
+    <path android:fillColor="#0CA30C" android:pathData="M106,48V13Q106,9 110,9H116Q120,9 120,13V48Z" />
+    <path android:fillColor="#0CA30C" android:pathData="M126,48V11Q126,7 130,7H134Q134,7 134,11V48Z" />
+</vector>

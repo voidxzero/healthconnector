@@ -1,0 +1,16 @@
+<resources>
+    <style name="Theme.HealthConnector" parent="Theme.Material3.DayNight.NoActionBar">
+        <item name="colorPrimary">#3F51B5</item>
+        <item name="colorOnPrimary">#FFFFFF</item>
+        <item name="colorPrimaryContainer">#DDE1FF</item>
+        <item name="colorOnPrimaryContainer">#001257</item>
+        <item name="colorSecondaryContainer">#E1E0F9</item>
+        <item name="colorOnSecondaryContainer">#191A2C</item>
+        <item name="android:colorBackground">#FBF8FF</item>
+        <item name="colorSurface">#FBF8FF</item>
+        <item name="colorSurfaceContainerHighest">#E4E1EC</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:windowLightStatusBar">true</item>
+    </style>
+</resources>

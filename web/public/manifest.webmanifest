@@ -1,0 +1,3 @@
+{ "name": "HealthConnector", "short_name": "HealthConnector", "start_url": ".", "display": "standalone",
+  "background_color": "#f8f9ff", "theme_color": "#00639b",
+  "icons": [{ "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }] }

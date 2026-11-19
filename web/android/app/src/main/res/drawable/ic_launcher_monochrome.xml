@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The themed-icon version (Android 13+): one colour, so no pulse line. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp" android:height="108dp" android:viewportWidth="108" android:viewportHeight="108">
+    <path android:fillColor="#000000" android:pathData="M54,86 C30,68 24,56 24,46 C24,38.5 30,34 36.5,34 C44,34 50,39 54,45 C58,39 64,34 71.5,34 C78,34 84,38.5 84,46 C84,56 78,68 54,86 Z" />
+    <path android:fillColor="#000000" android:pathData="M40.5,22 C42.4,22 44,23.6 44,25.5 L44,38 L37,38 L37,25.5 C37,23.6 38.6,22 40.5,22 Z" />
+    <path android:fillColor="#000000" android:pathData="M67.5,22 C69.4,22 71,23.6 71,25.5 L71,38 L64,38 L64,25.5 C64,23.6 65.6,22 67.5,22 Z" />
+</vector>

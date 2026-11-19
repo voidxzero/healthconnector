@@ -1,0 +1,8 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">HealthConnector</string>
+    <string name="title_activity_main">HealthConnector</string>
+    <string name="package_name">app.healthconnector</string>
+    <string name="custom_url_scheme">app.healthconnector</string>
+    <string name="widget_description">One health number or chart, such as last night\'s sleep or today\'s steps. Choose which when you add it.</string>
+</resources>

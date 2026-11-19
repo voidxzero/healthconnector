@@ -1,0 +1,26 @@
+.venv/
+__pycache__/
+.env
+data/
+web/node_modules/
+web/dist/
+web/android/app/build/
+web/android/build/
+web/android/.gradle/
+web/android/local.properties
+web/android/app/src/main/assets/public
+web/android/app/src/main/assets/capacitor*.json
+web/android/capacitor-cordova-android-plugins/
+*.apk
+
+# The first version's standalone Android project (superseded, kept for reference): source only
+android/build/
+android/app/build/
+android/.gradle/
+android/.kotlin/
+android/local.properties
+android/.tools/
+*.keystore
+*.jks
+keystore.properties
+.DS_Store
