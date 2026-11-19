@@ -17,7 +17,13 @@ Self-hosted dashboard for Android Health Connect data. Three parts: a Python ser
 - `Dockerfile`, `docker-compose.yml` — one image: builds `web/`, serves it from the Python server as `./static`.
 - `build-apk.sh` — builds `healthconnector.apk` (debug-signed) at the project root.
 - `demo_data.py` — fills a throwaway server with 90 days of made-up data.
-- `android/` and `static/` at the root are the first version (standalone forwarder app, one-page viewer). Superseded, unused, left in place because there's no git history to recover them from. Ask before deleting.
+- `android/` and `static/` at the root are the first version (standalone forwarder app, one-page viewer). Superseded and unused; kept (source only) in the first commit. Safe to delete now: they're recoverable from git history. Ask first anyway.
+
+## Repository
+
+- `origin` is `git@github.com:voidxzero/healthconnector.git` (private), over SSH; `gh` is logged in as `voidxzero`. Default branch `main`. History starts 2026-11-19 with one commit of the already-working project.
+- Never commit `.env`, `data/`, `*.apk`, `node_modules`, `dist`, `.venv` or signing keys (all in `.gitignore`). The APK is built locally (`./build-apk.sh`, debug-signed) and not published anywhere yet.
+- Only commit or push when the user asks.
 
 ## Commands
 
