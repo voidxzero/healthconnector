@@ -31,7 +31,8 @@ function delta(rows: Day[]): string | null {
 export function Overview({ onGo }: { onGo: (tab: string) => void }) {
   const units = useUnits();
   const days = lastDays(14);
-  const daily = useDaily(TILES, 14);
+  // Look back 90 days so a metric whose latest reading is a few weeks old still shows (with its date), not as "no data".
+  const daily = useDaily(TILES, 90);
   const latest = useLatest();
   const bp = latest.data?.blood_pressure;
   // Access already given but nothing to show: then "Allow access" is the wrong advice.
@@ -51,7 +52,7 @@ export function Overview({ onGo }: { onGo: (tab: string) => void }) {
       {!have.length && !bp && !daily.error && (
         <Empty title="No health data yet">
           {isLocal() && allowed
-            ? "Health Connect is allowed, but it has nothing for this app to show yet. This app reads what other apps (a watch, Fitbit, Samsung Health…) put into Health Connect."
+            ? "Health Connect is allowed, but it has no records from the last 90 days for this app to show. This app reads what other apps (a watch, Fitbit, Samsung Health…) put into Health Connect."
             : isLocal()
             ? 'Allow access to Health Connect and your data appears here.'
             : isNative
@@ -73,7 +74,8 @@ export function Overview({ onGo }: { onGo: (tab: string) => void }) {
           const m = METRICS[k];
           const rows = data[k];
           const last = rows[rows.length - 1];
-          const d = m.kind === 'sum' ? delta(rows) : null;
+          // The comparison with the week before only means something while the data is recent.
+          const d = m.kind === 'sum' && last.date >= days[0] ? delta(rows.filter((r) => r.date >= days[0])) : null;
           return (
             <Card key={k} className="tile">
               <p className="tile-label">

@@ -331,7 +331,7 @@ function HealthCheck({ info }: { info: Sdk }) {
                   <td>{METRICS[r.type]?.label ?? r.type}</td>
                   <td className="num">{!r.granted ? 'not allowed' : r.count < 0 ? 'error' : r.count}</td>
                   <td className="muted small">
-                    {!r.granted ? '' : r.count < 0 ? r.sources[0] : r.count > 0 ? r.sources.map(sourceName).join(', ') : r.beyond && r.newestMs ? `newest ${new Date(r.newestMs).toLocaleDateString()} (older than read)` : ''}
+                    {!r.granted ? '' : r.count < 0 ? r.sources[0] : r.count > 0 ? `${r.sources.map(sourceName).join(', ')}${r.newestMs ? ` · newest ${new Date(r.newestMs).toLocaleDateString()}` : ''}` : r.beyond && r.newestMs ? `newest ${new Date(r.newestMs).toLocaleDateString()} (older than read)` : ''}
                   </td>
                 </tr>
               ))}
